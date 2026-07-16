@@ -1,66 +1,78 @@
-## Foundry
+`# Points Hook
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+A Uniswap v4 hook that rewards users with ERC-1155 "points" for interacting with an
+ETH-TOKEN pool — both for swapping ETH into TOKEN and for adding liquidity.
 
-Foundry consists of:
+## How it works
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+`PointsHook` (in [`src/PointsHook.sol`](src/PointsHook.sol)) is a `BaseHook` that is also an
+ERC-1155 token contract. Points are minted with `id == poolId`, so each pool this hook is
+attached to gets its own points token.
 
-## Documentation
+- **`afterSwap`** — when a user buys TOKEN with ETH (a `zeroForOne` swap on an ETH/TOKEN
+  pool), the hook mints points equal to 20% of the ETH spent.
+- **`afterAddLiquidity`** — when a user adds liquidity to an ETH/TOKEN pool, the hook mints
+  points equal to 20% of the ETH deposited.
 
-https://book.getfoundry.sh/
+In both cases:
+- The pool must have `currency0` be the native ETH placeholder address (i.e. an ETH/TOKEN
+  pool) — other pools are ignored.
+- The recipient is read from `hookData`, which must ABI-encode a single `address`. If no
+  `hookData` is passed, or it decodes to `address(0)`, no points are minted.
+
+Known limitation: points minted for adding liquidity are not clawed back on
+`afterRemoveLiquidity`, so liquidity can currently be added and withdrawn purely to farm
+points.
+
+## Project layout
+
+```
+src/PointsHook.sol   # the hook contract
+test/                # Foundry tests (WIP)
+script/              # deployment scripts (WIP)
+```
 
 ## Usage
+
+This is a [Foundry](https://book.getfoundry.sh/) project.
 
 ### Build
 
 ```shell
-$ forge build
+forge build
 ```
 
 ### Test
 
 ```shell
-$ forge test
+forge test
 ```
 
 ### Format
 
 ```shell
-$ forge fmt
+forge fmt
 ```
 
-### Gas Snapshots
+### Gas snapshots
 
 ```shell
-$ forge snapshot
+forge snapshot
 ```
 
-### Anvil
+### Local node
 
 ```shell
-$ anvil
+anvil
 ```
 
 ### Deploy
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
+Because Uniswap v4 hook addresses must encode their permission flags, hooks can't be
+deployed with a plain `forge create` — they need to be mined/deployed via `CREATE2` (e.g.
+with `HookMiner`) so the resulting address has the right flag bits set. Add a deployment
+script under `script/` that does this before deploying to a live network.
 
 ```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+forge script script/<YourScript>.s.sol --rpc-url <your_rpc_url> --private-key <your_private_key> --broadcast
 ```
