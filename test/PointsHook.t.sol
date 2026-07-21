@@ -10,6 +10,7 @@ import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
+import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
@@ -98,5 +99,32 @@ contract TestPointsHook is Test, Deployers, ERC1155TokenReceiver {
         );
         uint256 pointsBalanceAfterSwap = hook.balanceOf(address(this), poolIdUint);
         assertEq(pointsBalanceAfterSwap - pointsBalanceOriginal, 2 * 10 ** 14);
+    }
+
+    function test_addLiquidity() public {
+        uint256 poolIdUint = uint256(PoolId.unwrap(key.toId()));
+        uint256 pointsBalanceOriginal = hook.balanceOf(address(this), poolIdUint);
+
+        // Set user address in hook data
+        bytes memory hookData = abi.encode(address(this));
+
+        uint160 sqrtPriceAtTickUpper = TickMath.getSqrtPriceAtTick(60);
+        uint256 ethToAdd = 0.001 ether;
+        uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmount0(SQRT_PRICE_1_1, sqrtPriceAtTickUpper, ethToAdd);
+
+        // Add liquidity to the same ETH-TOKEN position created in setUp()
+        BalanceDelta delta = modifyLiquidityRouter.modifyLiquidity{value: ethToAdd}(
+            key,
+            ModifyLiquidityParams({
+                tickLower: -60, tickUpper: 60, liquidityDelta: int256(uint256(liquidityDelta)), salt: bytes32(0)
+            }),
+            hookData
+        );
+
+        uint256 pointsBalanceAfterAddLiquidity = hook.balanceOf(address(this), poolIdUint);
+
+        // Points should equal 20% of the ETH actually deposited for this liquidity add
+        uint256 ethAmountAdded = uint256(int256(-delta.amount0()));
+        assertEq(pointsBalanceAfterAddLiquidity - pointsBalanceOriginal, ethAmountAdded / 5);
     }
 }
